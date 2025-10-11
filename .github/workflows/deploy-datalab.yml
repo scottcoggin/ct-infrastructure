@@ -43,3 +43,14 @@ jobs:
           echo ""
           echo "Cube.js models:"
           ls -la /root/docker/apps/datalab/cube/model/
+
+      - name: Wait for Portainer auto-deploy
+        run: |
+          echo "Waiting 30 seconds for Portainer to detect and deploy changes..."
+          sleep 30
+
+      - name: Restart database-dependent services
+        run: |
+          echo "Restarting services to clear stale database connections..."
+          docker restart datalab-cube datalab-mage datalab-superset
+          echo "Services restarted successfully"
