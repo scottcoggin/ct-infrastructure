@@ -1,0 +1,85 @@
+services:
+  # PostgreSQL - Database for n8n workflow and credential storage
+  postgres:
+    image: postgres:16-alpine
+    container_name: n8n-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-n8n}
+      POSTGRES_NON_ROOT_USER: ${POSTGRES_NON_ROOT_USER:-n8n}
+      POSTGRES_NON_ROOT_PASSWORD: ${POSTGRES_NON_ROOT_PASSWORD:-n8n}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - /root/docker/apps/n8n/init-data.sh:/docker-entrypoint-initdb.d/init-data.sh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-n8n}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ct-network
+
+  # n8n - Workflow automation platform
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: n8n
+    restart: unless-stopped
+    environment:
+      # Database configuration
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB:-n8n}
+      - DB_POSTGRESDB_USER=${POSTGRES_NON_ROOT_USER:-n8n}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_NON_ROOT_PASSWORD:-n8n}
+
+      # n8n configuration
+      - N8N_HOST=${N8N_DOMAIN:-n8n.homenet24.lan}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=${WEBHOOK_URL:-http://n8n.homenet24.lan}
+
+      # Security
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - N8N_SECURE_COOKIE=false
+
+      # Timezone
+      - GENERIC_TIMEZONE=${TZ:-America/New_York}
+      - TZ=${TZ:-America/New_York}
+
+      # Execution mode
+      - EXECUTIONS_MODE=regular
+
+      # Optional: Basic authentication (uncomment if needed)
+      # - N8N_BASIC_AUTH_ACTIVE=${N8N_BASIC_AUTH_ACTIVE:-false}
+      # - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      # - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ct-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.n8n.rule=Host(`${N8N_DOMAIN:-n8n.homenet24.lan}`)"
+      - "traefik.http.routers.n8n.entrypoints=web"
+      - "traefik.http.services.n8n.loadbalancer.server.port=5678"
+
+# Named volumes
+volumes:
+  postgres_data:
+    driver: local
+  n8n_data:
+    driver: local
+
+# Shared network for all CT stacks (created by Traefik)
+networks:
+  ct-network:
+    external: true
+    name: ct-network

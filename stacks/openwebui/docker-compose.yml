@@ -1,0 +1,107 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: litellm-postgres
+    environment:
+      - POSTGRES_DB=litellm
+      - POSTGRES_USER=litellm
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-litellm_password}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - /root/docker/apps/openwebui/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ct-network
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: litellm
+    ports:
+      - "4000:4000"
+    environment:
+      - LITELLM_PROXY_PORT=4000
+      - LITELLM_MASTER_KEY=${LITELLM_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - XAI_API_KEY=${XAI_API_KEY}
+      - DATABASE_URL=postgresql://litellm:${POSTGRES_PASSWORD:-litellm_password}@postgres:5432/litellm
+    volumes:
+      - /root/docker/apps/openwebui/litellm_config.yaml:/app/proxy_server_config.yaml
+    command: ["--config", "/app/proxy_server_config.yaml"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - ct-network
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    networks:
+      - ct-network
+    # Uncomment the following section if you have NVIDIA GPU support
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    ports:
+      - "3000:8080"
+    volumes:
+      - open-webui-data:/app/backend/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.openwebui.rule=Host(`${OPENWEBUI_DOMAIN:-openwebui.homenet24.lan}`)"
+      - "traefik.http.routers.openwebui.entrypoints=web"
+      - "traefik.http.services.openwebui.loadbalancer.server.port=8080"
+    environment:
+      # LiteLLM configuration for external APIs
+      - OPENAI_API_BASE_URL=http://litellm:4000/v1
+      - OPENAI_API_KEY=${LITELLM_API_KEY}
+      - ENABLE_OPENAI_API=true
+      # Ollama configuration for local models
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - ENABLE_OLLAMA_API=true
+      # Default models from both sources
+      - DEFAULT_MODELS=llama3.2:3b
+      # WebUI settings
+      - WEBUI_AUTH=true
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
+      - ENABLE_SIGNUP=true
+      - AUTOMATIC_1111_BASE_URL=
+      - ENABLE_AUTOMATIC1111_API=false
+    depends_on:
+      - litellm
+      - ollama
+    restart: unless-stopped
+    networks:
+      - ct-network
+
+volumes:
+  postgres-data:
+  ollama-data:
+  open-webui-data:
+
+networks:
+  ct-network:
+    external: true
+    name: ct-network

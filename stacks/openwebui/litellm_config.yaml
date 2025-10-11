@@ -1,0 +1,90 @@
+litellm_settings:
+  drop_params: true
+  set_verbose: true
+  # Database configuration
+  database_url: "postgresql://litellm:${POSTGRES_PASSWORD:-litellm_password}@postgres:5432/litellm"
+  # Enable database features
+  store_model_in_db: true
+  # Enable basic caching (no external dependencies)
+  cache: false
+  # Enable rate limiting
+  max_budget: 10
+  budget_duration: "30d"
+
+model_list:
+  # === ANTHROPIC (BEST QUALITY) ===
+
+  # Tier 1: Best overall - Latest Sonnet 4.5 (Sept 2025)
+  - model_name: claude-sonnet-4-5
+    litellm_params:
+      model: claude-sonnet-4-5-20250929
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # Tier 2: Maximum power - Opus 4.1 (Aug 2025)
+  - model_name: claude-opus-4-1
+    litellm_params:
+      model: claude-opus-4-1-20250805
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # Tier 3: Fast & cheap - Haiku 3.5 (Oct 2024)
+  - model_name: claude-3-5-haiku
+    litellm_params:
+      model: claude-3-5-haiku-20241022
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # === OPENAI (MOST VERSATILE) ===
+
+  # Tier 1: Best overall - GPT-5 (Aug 2025)
+  - model_name: gpt-5
+    litellm_params:
+      model: gpt-5-2025-08-07
+      api_key: os.environ/OPENAI_API_KEY
+
+  # Tier 3: Fast & cheap - GPT-5 Mini
+  - model_name: gpt-5-mini
+    litellm_params:
+      model: gpt-5-mini-2025-08-07
+      api_key: os.environ/OPENAI_API_KEY
+
+  # Tier 3: Ultra-cheap - GPT-5 Nano
+  - model_name: gpt-5-nano
+    litellm_params:
+      model: gpt-5-nano-2025-08-07
+      api_key: os.environ/OPENAI_API_KEY
+
+  # Tier 4: Always latest
+  - model_name: gpt-5-chat-latest
+    litellm_params:
+      model: gpt-5-chat-latest
+      api_key: os.environ/OPENAI_API_KEY
+
+  # === XAI GROK (MOST COST-EFFICIENT) ===
+
+  # Tier 1: Best value - Reasoning mode (2M context)
+  - model_name: grok-4-fast-reasoning
+    litellm_params:
+      model: xai/grok-4-fast-reasoning
+      api_key: os.environ/XAI_API_KEY
+      api_base: https://api.x.ai/v1
+
+  # Tier 2: Maximum power - Grok 4 (July 2025)
+  - model_name: grok-4
+    litellm_params:
+      model: xai/grok-4-0709
+      api_key: os.environ/XAI_API_KEY
+      api_base: https://api.x.ai/v1
+
+  # Tier 3: Fast inference - Non-reasoning mode
+  - model_name: grok-4-fast
+    litellm_params:
+      model: xai/grok-4-fast-non-reasoning
+      api_key: os.environ/XAI_API_KEY
+      api_base: https://api.x.ai/v1
+
+  # Specialized: Agentic coding
+  - model_name: grok-code-fast-1
+    litellm_params:
+      model: xai/grok-code-fast-1
+      api_key: os.environ/XAI_API_KEY
+      api_base: https://api.x.ai/v1
+

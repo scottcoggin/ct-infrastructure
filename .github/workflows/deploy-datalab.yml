@@ -1,0 +1,45 @@
+name: Deploy DataLab Stack
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'stacks/datalab/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy support files to deployment location
+        run: |
+          # Create directory structure
+          mkdir -p /root/docker/apps/datalab/cube/model
+
+          # Copy init scripts
+          cp stacks/datalab/init-db.sql /root/docker/apps/datalab/
+          cp stacks/datalab/superset-init.sh /root/docker/apps/datalab/
+
+          # Copy Cube.js files
+          cp stacks/datalab/cube/cube.js /root/docker/apps/datalab/cube/
+          cp stacks/datalab/cube/README.md /root/docker/apps/datalab/cube/
+          cp stacks/datalab/cube/model/* /root/docker/apps/datalab/cube/model/
+
+      - name: Deployment complete
+        run: |
+          echo "[SUCCESS] Support files copied to /root/docker/apps/datalab/"
+          echo "Portainer will auto-deploy within 5 minutes (polling interval)"
+          echo "Or manually trigger: Portainer UI -> Stacks -> datalab -> Pull and redeploy"
+
+      - name: Verify files copied successfully
+        run: |
+          echo "Verifying file structure..."
+          ls -la /root/docker/apps/datalab/
+          echo ""
+          echo "Cube.js models:"
+          ls -la /root/docker/apps/datalab/cube/model/

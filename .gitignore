@@ -1,0 +1,31 @@
+# Environment files with secrets
+.env
+.env.local
+
+# Mage data directory
+stacks/datalab/mage_data/
+
+# Local development data
+**/ollama-data/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.claude/
+
+# Git directories from old repos
+.git/
+
+# Temporary files
+tmp/
+temp/

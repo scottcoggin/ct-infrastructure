@@ -1,0 +1,188 @@
+services:
+  # PostgreSQL - Primary database for metadata and data warehouse
+  postgres:
+    image: postgres:15-alpine
+    container_name: datalab-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: postgres
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - /root/docker/apps/datalab/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ct-network
+
+  # Redis - Caching and message broker
+  redis:
+    image: redis:7-alpine
+    container_name: datalab-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - ct-network
+
+  # Mage - Data pipeline orchestration
+  mage:
+    image: mageai/mageai:latest
+    container_name: datalab-mage
+    restart: unless-stopped
+    command: mage start ${MAGE_PROJECT_NAME:-datalab}
+    environment:
+      USER_CODE_PATH: /home/src/${MAGE_PROJECT_NAME:-datalab}
+      POSTGRES_DBNAME: ${MAGE_DATABASE:-mage_db}
+      POSTGRES_SCHEMA: public
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      # Connection to datamart for pipelines
+      DATAMART_DBNAME: ${DATAMART_DATABASE:-datamart}
+      DATAMART_USER: ${POSTGRES_USER:-postgres}
+      DATAMART_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DATAMART_HOST: postgres
+      DATAMART_PORT: 5432
+    ports:
+      - "${MAGE_PORT:-6789}:6789"
+    volumes:
+      - /root/docker/apps/datalab/mage_data:/home/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ct-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mage.rule=Host(`${MAGE_DOMAIN:-mage.homenet24.lan}`)"
+      - "traefik.http.routers.mage.entrypoints=web"
+      - "traefik.http.services.mage.loadbalancer.server.port=6789"
+
+  # Cube.js - Semantic layer and metrics store
+  cube:
+    image: cubejs/cube:latest
+    container_name: datalab-cube
+    restart: unless-stopped
+    environment:
+      # Database connection (datamart)
+      CUBEJS_DB_TYPE: postgres
+      CUBEJS_DB_HOST: postgres
+      CUBEJS_DB_PORT: 5432
+      CUBEJS_DB_NAME: ${DATAMART_DATABASE:-datamart}
+      CUBEJS_DB_USER: ${POSTGRES_USER:-postgres}
+      CUBEJS_DB_PASS: ${POSTGRES_PASSWORD:-postgres}
+
+      # API configuration
+      CUBEJS_API_SECRET: ${CUBEJS_API_SECRET:-CHANGE_ME_TO_A_COMPLEX_RANDOM_SECRET}
+      CUBEJS_DEV_MODE: ${CUBEJS_DEV_MODE:-true}
+
+      # Web UI
+      CUBEJS_WEB_SOCKETS: "true"
+    ports:
+      - "${CUBEJS_PORT:-4000}:4000"
+    volumes:
+      - /root/docker/apps/datalab/cube:/cube/conf
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ct-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cube.rule=Host(`${CUBEJS_DOMAIN:-cube.homenet24.lan}`)"
+      - "traefik.http.routers.cube.entrypoints=web"
+      - "traefik.http.services.cube.loadbalancer.server.port=4000"
+
+  # Superset - Business intelligence and visualization
+  superset:
+    image: apache/superset:latest
+    container_name: datalab-superset
+    restart: unless-stopped
+    environment:
+      # Database connection (metadata)
+      DATABASE_DB: ${SUPERSET_DATABASE:-superset_db}
+      DATABASE_HOST: postgres
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DATABASE_USER: ${POSTGRES_USER:-postgres}
+      DATABASE_PORT: 5432
+      DATABASE_DIALECT: postgresql
+
+      # Redis connection
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+      # Superset configuration
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-CHANGE_ME_TO_A_COMPLEX_RANDOM_SECRET}
+      SUPERSET_LOAD_EXAMPLES: ${SUPERSET_LOAD_EXAMPLES:-no}
+
+      # Datamart connection strings (for reference)
+      DATAMART_CONNECTION_STRING: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${DATAMART_DATABASE:-datamart}
+    ports:
+      - "${SUPERSET_PORT:-8088}:8088"
+    volumes:
+      - superset_home:/app/superset_home
+      - /root/docker/apps/datalab/superset-init.sh:/app/docker/superset-init.sh
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ct-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.superset.rule=Host(`${SUPERSET_DOMAIN:-superset.homenet24.lan}`)"
+      - "traefik.http.routers.superset.entrypoints=web"
+      - "traefik.http.services.superset.loadbalancer.server.port=8088"
+    command: >
+      sh -c "
+      if [ ! -f /app/superset_home/.init_done ]; then
+        echo 'Initializing Superset database...';
+        superset db upgrade;
+        echo 'Creating admin user...';
+        superset fab create-admin \
+          --username ${SUPERSET_ADMIN_USERNAME:-admin} \
+          --firstname ${SUPERSET_ADMIN_FIRSTNAME:-Admin} \
+          --lastname ${SUPERSET_ADMIN_LASTNAME:-User} \
+          --email ${SUPERSET_ADMIN_EMAIL:-admin@datalab.local} \
+          --password ${SUPERSET_ADMIN_PASSWORD:-admin};
+        echo 'Initializing Superset...';
+        superset init;
+        touch /app/superset_home/.init_done;
+        echo 'Superset initialization complete!';
+      else
+        echo 'Superset already initialized, skipping...';
+      fi;
+      /usr/bin/run-server.sh
+      "
+
+# Named volumes
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  superset_home:
+    driver: local
+
+# Shared network for all CT stacks (created by Traefik)
+networks:
+  ct-network:
+    external: true
+    name: ct-network
