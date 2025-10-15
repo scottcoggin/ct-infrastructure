@@ -43,8 +43,10 @@ services:
 
       # Timezone
       TZ: ${TZ:-America/New_York}
-    ports:
-      - "${ESPOCRM_PORT:-8080}:80"
+    # Port mapping commented out - access via Traefik at espocrm.homenet24.lan
+    # Uncomment if you need direct port access (change 8080 to avoid conflicts)
+    # ports:
+    #   - "${ESPOCRM_PORT:-8081}:80"
     volumes:
       - espocrm_data:/var/www/html
     depends_on:
