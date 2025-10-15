@@ -1,0 +1,175 @@
+{
+  "name": "LinkedIn Contacts to EspoCRM",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "fileSelector": "linkedin_contacts.csv"
+      },
+      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "name": "Read CSV File",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [440, 300],
+      "notes": "Upload your LinkedIn contacts CSV export here"
+    },
+    {
+      "parameters": {
+        "mode": "jsonToCsv",
+        "options": {
+          "headerRow": true
+        }
+      },
+      "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+      "name": "Parse CSV",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Map LinkedIn fields to EspoCRM format\nconst items = $input.all();\nconst mapped = [];\n\nfor (const item of items) {\n  const data = item.json;\n  \n  // Skip if no email (cannot deduplicate)\n  if (!data['Email Address'] || data['Email Address'].trim() === '') {\n    continue;\n  }\n  \n  mapped.push({\n    json: {\n      firstName: data['First Name'] || '',\n      lastName: data['Last Name'] || '',\n      emailAddress: data['Email Address'] || '',\n      title: data['Position'] || '',\n      accountName: data['Company'] || '',\n      description: `Imported from LinkedIn on ${new Date().toISOString().split('T')[0]}`,\n      linkedInUrl: data['URL'] || '',\n      // Optional fields\n      phoneNumber: data['Phone Number'] || '',\n      // Add custom fields as needed\n    }\n  });\n}\n\nreturn mapped;"
+      },
+      "id": "d4e5f6a7-b8c9-0123-def1-234567890123",
+      "name": "Map Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 300],
+      "notes": "Maps LinkedIn CSV columns to EspoCRM contact fields"
+    },
+    {
+      "parameters": {
+        "options": {
+          "disableDotNotation": false,
+          "fuzzyCompare": false
+        }
+      },
+      "id": "e5f6a7b8-c9d0-1234-ef12-345678901234",
+      "name": "Remove Duplicates",
+      "type": "n8n-nodes-base.removeDuplicates",
+      "typeVersion": 1,
+      "position": [1040, 300],
+      "parameters": {
+        "compare": "selectedFields",
+        "fieldsToCompare": {
+          "fields": [
+            {
+              "fieldName": "emailAddress"
+            }
+          ]
+        }
+      },
+      "notes": "Deduplicates by email address"
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "upsert",
+        "additionalFields": {
+          "firstName": "={{$json.firstName}}",
+          "lastName": "={{$json.lastName}}",
+          "emailAddress": "={{$json.emailAddress}}",
+          "title": "={{$json.title}}",
+          "accountName": "={{$json.accountName}}",
+          "description": "={{$json.description}}"
+        }
+      },
+      "id": "f6a7b8c9-d0e1-2345-f123-456789012345",
+      "name": "Create/Update Contact in EspoCRM",
+      "type": "@traien/n8n-nodes-espocrm.espoCrm",
+      "typeVersion": 1,
+      "position": [1240, 300],
+      "credentials": {
+        "espoCrmApi": {
+          "id": "1",
+          "name": "EspoCRM Account"
+        }
+      },
+      "notes": "Creates new contacts or updates existing ones based on email"
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Read CSV File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read CSV File": {
+      "main": [
+        [
+          {
+            "node": "Parse CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse CSV": {
+      "main": [
+        [
+          {
+            "node": "Map Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Fields": {
+      "main": [
+        [
+          {
+            "node": "Remove Duplicates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove Duplicates": {
+      "main": [
+        [
+          {
+            "node": "Create/Update Contact in EspoCRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "CRM",
+      "id": "crm-tag"
+    },
+    {
+      "name": "LinkedIn",
+      "id": "linkedin-tag"
+    }
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "your-instance-id"
+  },
+  "pinData": {},
+  "versionId": "1.0.0"
+}

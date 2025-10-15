@@ -1,0 +1,88 @@
+services:
+  # MySQL - Database for EspoCRM
+  mysql:
+    image: mysql:8.4
+    container_name: espocrm-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-espocrm}
+      MYSQL_USER: ${MYSQL_USER:-espocrm}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-espocrm}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - ct-network
+
+  # EspoCRM - Main application
+  espocrm:
+    image: espocrm/espocrm:latest
+    container_name: espocrm
+    restart: unless-stopped
+    environment:
+      # Database configuration
+      ESPOCRM_DATABASE_PLATFORM: Mysql
+      ESPOCRM_DATABASE_HOST: mysql
+      ESPOCRM_DATABASE_PORT: 3306
+      ESPOCRM_DATABASE_NAME: ${MYSQL_DATABASE:-espocrm}
+      ESPOCRM_DATABASE_USER: ${MYSQL_USER:-espocrm}
+      ESPOCRM_DATABASE_PASSWORD: ${MYSQL_PASSWORD:-espocrm}
+
+      # Admin user configuration (only used on first startup)
+      ESPOCRM_ADMIN_USERNAME: ${ESPOCRM_ADMIN_USERNAME:-admin}
+      ESPOCRM_ADMIN_PASSWORD: ${ESPOCRM_ADMIN_PASSWORD:-admin}
+
+      # Application configuration
+      ESPOCRM_SITE_URL: ${ESPOCRM_SITE_URL:-http://espocrm.homenet24.lan}
+
+      # Timezone
+      TZ: ${TZ:-America/New_York}
+    ports:
+      - "${ESPOCRM_PORT:-8080}:80"
+    volumes:
+      - espocrm_data:/var/www/html
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - ct-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.espocrm.rule=Host(`${ESPOCRM_DOMAIN:-espocrm.homenet24.lan}`)"
+      - "traefik.http.routers.espocrm.entrypoints=web"
+      - "traefik.http.services.espocrm.loadbalancer.server.port=80"
+
+  # EspoCRM Daemon - Background jobs and scheduled tasks
+  espocrm-daemon:
+    image: espocrm/espocrm:latest
+    container_name: espocrm-daemon
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-America/New_York}
+    volumes:
+      - espocrm_data:/var/www/html
+    depends_on:
+      espocrm:
+        condition: service_started
+    networks:
+      - ct-network
+    entrypoint: docker-daemon.sh
+
+# Named volumes
+volumes:
+  mysql_data:
+    driver: local
+  espocrm_data:
+    driver: local
+
+# Shared network for all CT stacks (created by Traefik)
+networks:
+  ct-network:
+    external: true
+    name: ct-network
