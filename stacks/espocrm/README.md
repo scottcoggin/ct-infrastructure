@@ -4,7 +4,7 @@ Open-source CRM for personal relationship management with work associates, conta
 
 ## Overview
 
-EspoCRM is a mature, feature-rich customer relationship management platform designed for personal and business use. This stack is configured for tracking interactions with work associates, managing contacts imported from LinkedIn/Facebook, and integrating with Proton Mail for email communication.
+EspoCRM is a mature, feature-rich customer relationship management platform designed for personal and business use. This stack is configured for tracking interactions with work associates, managing contacts imported from LinkedIn/Facebook, and integrating with your email provider for communication via standard SMTP/IMAP protocols.
 
 ## Architecture
 
@@ -68,71 +68,81 @@ cp .env.example .env
 2. Set your email address for notifications
 3. Configure timezone and date/time format
 
-**Personal Email Account (Proton Mail):**
+**Personal Email Account:**
 1. Settings → Personal Email Accounts → Create Account
-2. See "Proton Mail Integration" section below for detailed setup
+2. See "Email Integration" section below for detailed setup
 
-## Proton Mail Integration
+## Email Integration
 
-EspoCRM integrates with Proton Mail via SMTP for sending emails. IMAP receiving requires Proton Mail Bridge (desktop app).
+EspoCRM supports email integration via standard SMTP (sending) and IMAP (receiving) protocols. This allows you to send and track emails directly from the CRM.
 
-### Prerequisites
+### Setup SMTP for Sending
 
-- Proton Mail paid plan (Mail Plus, Unlimited, or Business)
-- Custom domain email address OR Proton Mail Bridge for @proton.me addresses
+**Step 1: Gather SMTP Credentials from Your Email Provider**
 
-### Setup SMTP for Sending (Recommended)
+Consult your email provider's documentation for SMTP settings:
+- SMTP server hostname (e.g., smtp.example.com)
+- SMTP port (typically 465 for SSL, 587 for TLS/STARTTLS, 25 for unencrypted)
+- Authentication method (usually username/password or app-specific password)
+- Security protocol (SSL, TLS, STARTTLS, or None)
 
-**Step 1: Generate SMTP Token in Proton Mail**
-1. Log into Proton Mail: https://mail.proton.me
-2. Settings → All settings → Proton Mail → IMAP/SMTP
-3. Scroll to "SMTP tokens" section
-4. Click "Create token"
-5. Select your email address (must be custom domain)
-6. Copy the generated token (treat like a password)
+**Common providers:**
+- Gmail: Use app-specific passwords (requires 2FA enabled)
+- Outlook/Office 365: May require app passwords or OAuth
+- Proton Mail: Requires SMTP tokens or Bridge (see appendix)
+- Custom SMTP: Check your hosting provider's documentation
 
 **Step 2: Configure in EspoCRM**
+
 1. EspoCRM → Settings → Personal Email Accounts → Create Account
 2. Fill in the form:
-   - **Name**: "Proton Mail" (or any label)
-   - **Email Address**: your@customdomain.com
-   - **SMTP**:
-     - Host: `smtp.protonmail.ch`
-     - Port: `587`
-     - Security: `TLS` (STARTTLS)
-     - Authentication: `true`
-     - Username: your@customdomain.com
-     - Password: (paste SMTP token from Step 1)
-   - **IMAP**: Leave disabled (or configure Bridge - see below)
-3. Test Connection → Save
+   - **Name**: Descriptive label (e.g., "Work Email")
+   - **Email Address**: your@example.com
+   - **SMTP Settings**:
+     - Host: Your SMTP server hostname
+     - Port: Your provider's SMTP port
+     - Security: SSL, TLS, or None (match your provider's requirements)
+     - Authentication: Enable if required (usually yes)
+     - Username: Your email address or username
+     - Password: Your email password or app-specific token
+   - **IMAP**: Leave disabled for now (see optional setup below)
+3. Click "Test Connection" to verify settings
+4. Save
 
 **Step 3: Set as Default**
+
 1. Settings → Personal Email Accounts
-2. Click on your account → Set as Default
+2. Click on your configured account → Set as Default
 
-### Setup IMAP for Receiving (Optional - Requires Bridge)
+### Setup IMAP for Receiving (Optional)
 
-**If you want to receive and track emails in EspoCRM:**
+If you want to receive and track incoming emails in EspoCRM:
 
-1. **Install Proton Mail Bridge** (desktop app):
-   - Download: https://proton.me/mail/bridge
-   - Requires: Proton Mail paid plan
-   - Runs on: Your local machine (not Docker host)
+**Step 1: Gather IMAP Credentials**
 
-2. **Configure Bridge:**
-   - Launch Proton Mail Bridge
-   - Add your Proton Mail account
-   - Bridge provides local IMAP/SMTP server
-   - Note the local IMAP credentials
+Check your email provider's documentation for:
+- IMAP server hostname
+- IMAP port (typically 993 for SSL, 143 for TLS)
+- Security protocol
 
-3. **Configure EspoCRM IMAP:**
-   - Host: `<your-bridge-machine-ip>`
-   - Port: `1143` (Bridge default)
-   - Security: `TLS`
-   - Username: (from Bridge)
-   - Password: (from Bridge)
+**Step 2: Configure in EspoCRM**
 
-**Note:** Most personal use cases only need SMTP for sending. IMAP is optional.
+1. Edit your Personal Email Account
+2. Enable IMAP and fill in:
+   - Host: Your IMAP server hostname
+   - Port: Your provider's IMAP port
+   - Security: SSL or TLS
+   - Username: Usually same as SMTP username
+   - Password: Usually same as SMTP password
+3. Test Connection → Save
+
+**Step 3: Configure Fetch Settings**
+
+1. Set check frequency (e.g., every 5 minutes)
+2. Choose which folders to monitor
+3. Configure email-to-case or email-to-contact matching rules
+
+**Note:** Many users only need SMTP for sending. IMAP is optional and adds background email polling. For provider-specific examples, see the appendix.
 
 ## n8n Integration
 
@@ -333,7 +343,7 @@ ssh root@docker.homenet24.lan "docker exec espocrm-mysql mysqladmin ping -u root
 
 ### Can't Login
 
-**Reset admin password:**
+**Option 1: Reset password via CLI (Preserves Data)**
 ```bash
 # Access EspoCRM container
 ssh root@docker.homenet24.lan "docker exec -it espocrm bash"
@@ -345,22 +355,59 @@ php command.php set-password [username]
 exit
 ```
 
-### Email Not Sending (Proton Mail)
+**Option 2: Full Reset with New Password (Destructive)**
+
+If you need to reset the entire installation and apply new environment variables:
+
+```bash
+# WARNING: This deletes ALL CRM data (contacts, deals, emails, etc.)
+
+# 1. Stop and delete all volumes
+ssh root@docker.homenet24.lan "docker compose -p espocrm down -v"
+
+# 2. Update ESPOCRM_ADMIN_PASSWORD in Portainer UI:
+#    Portainer → Stacks → espocrm → Editor → Environment variables
+#    Update the password and click "Pull and redeploy"
+
+# 3. Verify deployment
+ssh root@docker.homenet24.lan "docker ps | grep espocrm"
+```
+
+**Note:** `ESPOCRM_ADMIN_PASSWORD` is only read during **first startup**. Changing it in Portainer doesn't update an existing admin account - the password becomes part of the persistent application state.
+
+### Email Not Sending
 
 **Check SMTP settings:**
 1. EspoCRM → Settings → Personal Email Accounts
 2. Edit your account → Test Connection
-3. Check SMTP credentials match Proton Mail token
+3. Verify credentials and settings match your provider's requirements
 
 **Common issues:**
-- Token expired: Regenerate in Proton Mail settings
-- Wrong port: Should be 587 with TLS/STARTTLS
-- Custom domain required: SMTP tokens don't work with @proton.me addresses
+- Wrong credentials: Verify username/password or app-specific password
+- Wrong port/security: Check your provider's documentation (SSL vs TLS vs STARTTLS)
+- Authentication required: Enable SMTP authentication
+- Firewall blocking: Ensure Docker container can reach SMTP server
+- Rate limiting: Some providers limit sending frequency
 
 **Test from command line:**
 ```bash
+# Install testing tool
 ssh root@docker.homenet24.lan "docker exec espocrm apt update && apt install -y swaks"
-ssh root@docker.homenet24.lan "docker exec espocrm swaks --to test@example.com --from your@domain.com --server smtp.protonmail.ch:587 --auth LOGIN --auth-user your@domain.com --auth-password 'YOUR_TOKEN' --tls"
+
+# Test SMTP connection (replace with your settings)
+ssh root@docker.homenet24.lan "docker exec espocrm swaks \
+  --to recipient@example.com \
+  --from your@example.com \
+  --server smtp.example.com:587 \
+  --auth LOGIN \
+  --auth-user your@example.com \
+  --auth-password 'YOUR_PASSWORD' \
+  --tls"
+```
+
+**Check EspoCRM logs:**
+```bash
+ssh root@docker.homenet24.lan "docker logs espocrm | grep -i email"
 ```
 
 ### Daemon Not Running
@@ -457,9 +504,87 @@ FROM espocrm.contact;
 
 1. **Change default passwords immediately**
 2. **Backup N8N_ENCRYPTION_KEY** if using n8n for CRM workflows
-3. **Secure Proton SMTP tokens** - treat like passwords
+3. **Secure email credentials** - use app-specific passwords when available
 4. **Regular backups:** Database + file attachments
 5. **API keys:** Rotate periodically, use least privilege
+
+## Appendix: Provider-Specific Email Examples
+
+### Proton Mail SMTP Configuration
+
+Proton Mail requires special configuration due to its end-to-end encryption:
+
+**Option 1: SMTP Tokens (Recommended for Custom Domains)**
+
+Prerequisites:
+- Proton Mail paid plan (Mail Plus, Unlimited, or Business)
+- Custom domain email address (SMTP tokens don't work with @proton.me addresses)
+
+Setup:
+1. Log into Proton Mail: https://mail.proton.me
+2. Settings → All settings → Proton Mail → IMAP/SMTP
+3. Scroll to "SMTP tokens" section → Click "Create token"
+4. Copy the generated token
+
+Configure in EspoCRM:
+- Host: `smtp.protonmail.ch`
+- Port: `587`
+- Security: `TLS` (STARTTLS)
+- Authentication: `true`
+- Username: your@customdomain.com
+- Password: (paste SMTP token)
+
+**Option 2: Proton Mail Bridge (For @proton.me Addresses or IMAP)**
+
+Prerequisites:
+- Proton Mail paid plan
+- Desktop application (Windows, macOS, Linux)
+
+Setup:
+1. Download Proton Mail Bridge: https://proton.me/mail/bridge
+2. Install and launch Bridge
+3. Add your Proton Mail account to Bridge
+4. Bridge provides local IMAP/SMTP server with credentials
+
+Configure in EspoCRM:
+- SMTP Host: `127.0.0.1` (or Bridge machine IP if remote)
+- SMTP Port: `1025` (Bridge default)
+- IMAP Host: `127.0.0.1`
+- IMAP Port: `1143` (Bridge default)
+- Security: `TLS`
+- Username/Password: Provided by Bridge application
+
+Note: Bridge must remain running for email to work.
+
+### Gmail SMTP Configuration
+
+Prerequisites:
+- Gmail account with 2-Factor Authentication enabled
+- App-specific password generated
+
+Setup:
+1. Google Account → Security → 2-Step Verification → App passwords
+2. Generate app password for "Mail"
+
+Configure in EspoCRM:
+- Host: `smtp.gmail.com`
+- Port: `587`
+- Security: `TLS` (STARTTLS)
+- Authentication: `true`
+- Username: your@gmail.com
+- Password: (16-character app password)
+
+### Outlook/Office 365 SMTP Configuration
+
+Configure in EspoCRM:
+- Host: `smtp.office365.com`
+- Port: `587`
+- Security: `TLS` (STARTTLS)
+- Authentication: `true`
+- Username: your@outlook.com
+- Password: Your account password or app password
+
+Note: Some Office 365 accounts may require app-specific passwords or OAuth (check your organization's settings).
 
 ## Documentation References
 
