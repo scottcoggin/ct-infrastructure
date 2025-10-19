@@ -12,7 +12,7 @@ ct/
 └── stacks/                 # Application stacks (Portainer Git deployment)
     ├── datalab/            # Data engineering stack
     ├── n8n/                # Workflow automation stack
-    └── openwebui/          # LLM interface stack
+    └── espocrm/            # Open-source CRM stack
 ```
 
 ### Infrastructure Layer
@@ -32,16 +32,15 @@ Application services deployed via Portainer Git integration for easy updates.
   - PostgreSQL data warehouse
   - Redis for caching
 
-- **OpenWebUI**: LLM interface supporting both cloud and local models
-  - Open WebUI for chat interface
-  - LiteLLM proxy for external APIs (OpenAI, Anthropic, xAI)
-  - Ollama for local model execution
-  - PostgreSQL for logging
-
 - **n8n**: Workflow automation platform for integrating services
   - n8n workflow engine with visual editor
   - PostgreSQL for workflow and credential storage
   - 500+ integrations and webhook support
+
+- **EspoCRM**: Open-source CRM for personal relationship management
+  - CRM web application and daemon
+  - MySQL database backend
+  - Email integration and contact management
 
 ## Network Architecture
 
@@ -90,7 +89,7 @@ Add A records in Pi-hole pointing to 10.0.0.4:
 - `mage.homenet24.lan`
 - `superset.homenet24.lan`
 - `n8n.homenet24.lan`
-- `openwebui.homenet24.lan`
+- `espocrm.homenet24.lan`
 
 #### 3. Copy Support Files to Remote
 
@@ -103,11 +102,6 @@ scp stacks/datalab/init-db.sql root@docker.homenet24.lan:/root/docker/apps/datal
 scp stacks/datalab/superset-init.sh root@docker.homenet24.lan:/root/docker/apps/datalab/
 ssh root@docker.homenet24.lan "mkdir -p /root/docker/apps/datalab/mage_data"
 
-# OpenWebUI support files
-ssh root@docker.homenet24.lan "mkdir -p /root/docker/apps/openwebui"
-scp stacks/openwebui/init-db.sql root@docker.homenet24.lan:/root/docker/apps/openwebui/
-scp stacks/openwebui/litellm_config.yaml root@docker.homenet24.lan:/root/docker/apps/openwebui/
-
 # n8n support files
 ssh root@docker.homenet24.lan "mkdir -p /root/docker/apps/n8n"
 scp stacks/n8n/init-data.sh root@docker.homenet24.lan:/root/docker/apps/n8n/
@@ -116,7 +110,7 @@ scp stacks/n8n/init-data.sh root@docker.homenet24.lan:/root/docker/apps/n8n/
 #### 4. Deploy Stacks via Portainer
 
 1. Access Portainer at http://portainer.homenet24.lan
-2. For each stack (datalab, n8n, openwebui):
+2. For each stack (datalab, n8n, espocrm):
    - Navigate to Stacks → Add Stack → Git Repository
    - Repository URL: Your Git repository URL
    - Reference: `main`
@@ -152,15 +146,13 @@ Environment variables are NOT stored in Git. They are configured in:
 - PostgreSQL: port 5432 (internal)
 - Redis: port 6379 (internal)
 
-### OpenWebUI Stack
-- Open WebUI: http://openwebui.homenet24.lan (or port 3000)
-- LiteLLM API: port 4000 (internal)
-- Ollama API: port 11434 (internal)
-- PostgreSQL: port 5432 (internal)
-
 ### n8n Stack
 - n8n: http://n8n.homenet24.lan (or port 5678)
 - PostgreSQL: port 5432 (internal)
+
+### EspoCRM Stack
+- EspoCRM: http://espocrm.homenet24.lan (or port 8080)
+- MySQL: port 3306 (internal)
 
 ## GitOps Workflow
 
@@ -171,7 +163,7 @@ All application stack changes are automatically deployed via Portainer Git integ
 1. **Edit files locally**
    ```bash
    cd ~/ct
-   # Edit stacks/datalab/docker-compose.yml or stacks/openwebui/docker-compose.yml
+   # Edit stacks/datalab/docker-compose.yml or stacks/n8n/docker-compose.yml
    ```
 
 2. **Commit and push**
@@ -190,7 +182,7 @@ All application stack changes are automatically deployed via Portainer Git integ
 ### Verifying GitOps Updates
 
 **Via Portainer UI:**
-- Navigate to **Stacks** → **datalab** or **openwebui**
+- Navigate to **Stacks** → **datalab** or **n8n** or **espocrm**
 - Scroll to "Git configuration" section
 - Check "Last update" timestamp and commit hash
 
@@ -240,22 +232,13 @@ scp stacks/[stack]/[file] root@docker.homenet24.lan:/root/docker/apps/[stack]/
 # Then restart affected services via Portainer or SSH
 ```
 
-**LiteLLM configuration update (OpenWebUI):**
-```bash
-# 1. Copy updated config to remote host
-scp stacks/openwebui/litellm_config.yaml root@docker.homenet24.lan:/root/docker/apps/openwebui/
-
-# 2. Restart LiteLLM service
-ssh root@docker.homenet24.lan "docker restart litellm"
-```
-
 **Database initialization files:**
 ```bash
 # DataLab
 scp stacks/datalab/init-db.sql root@docker.homenet24.lan:/root/docker/apps/datalab/
 
-# OpenWebUI
-scp stacks/openwebui/init-db.sql root@docker.homenet24.lan:/root/docker/apps/openwebui/
+# n8n
+scp stacks/n8n/init-data.sh root@docker.homenet24.lan:/root/docker/apps/n8n/
 
 # Note: These only run on first startup; changing them requires volume recreation
 ```
@@ -265,7 +248,7 @@ scp stacks/openwebui/init-db.sql root@docker.homenet24.lan:/root/docker/apps/ope
 Each stack has detailed documentation in its directory:
 - `stacks/datalab/README.md`: DataLab architecture and usage
 - `stacks/n8n/README.md`: n8n workflow automation and integrations
-- `stacks/openwebui/README.md`: OpenWebUI configuration and models
+- `stacks/espocrm/README.md`: EspoCRM CRM configuration and usage
 
 ## Backup Strategy
 
@@ -281,9 +264,6 @@ ssh root@docker.homenet24.lan "cd /root/docker/apps/datalab && docker compose ex
 
 # Mage pipelines (already on host)
 rsync -av root@docker.homenet24.lan:/root/docker/apps/datalab/mage_data/ ./backups/mage_data/
-
-# Ollama models (if needed)
-ssh root@docker.homenet24.lan "docker run --rm -v openwebui_ollama-data:/data -v /tmp:/backup alpine tar czf /backup/ollama-data.tar.gz -C /data ."
 ```
 
 ## Troubleshooting
@@ -322,7 +302,8 @@ ssh root@docker.homenet24.lan "docker run --rm -v openwebui_ollama-data:/data -v
 
 **Local backups:**
 - `~/ct/stacks/datalab/.env.local` - DataLab secrets (not in Git)
-- `~/ct/stacks/openwebui/.env` - OpenWebUI secrets (not in Git)
+- `~/ct/stacks/n8n/.env` - n8n secrets (not in Git)
+- `~/ct/stacks/espocrm/.env` - EspoCRM secrets (not in Git)
 - `~/ct/infrastructure/portainer/.env.local` - Portainer domain (not in Git)
 
 **Production secrets:**
