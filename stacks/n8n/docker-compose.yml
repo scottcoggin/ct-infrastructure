@@ -45,6 +45,11 @@ services:
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
       - N8N_SECURE_COOKIE=false
 
+      # Reverse proxy configuration (for Traefik)
+      - N8N_TRUST_PROXY=true
+      - N8N_PROXY_HOPS=1
+      - N8N_EDITOR_BASE_URL=${WEBHOOK_URL:-http://n8n.homenet24.lan}
+
       # Timezone
       - GENERIC_TIMEZONE=${TZ:-America/New_York}
       - TZ=${TZ:-America/New_York}
